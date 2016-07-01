@@ -17,13 +17,13 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/docopt/docopt-go"
-	"github.com/ngaut/gostats"
 	"github.com/CodisLabs/codis/pkg/proxy"
 	"github.com/CodisLabs/codis/pkg/proxy/router"
 	"github.com/CodisLabs/codis/pkg/utils"
 	"github.com/CodisLabs/codis/pkg/utils/bytesize"
 	"github.com/CodisLabs/codis/pkg/utils/log"
+	"github.com/docopt/docopt-go"
+	"github.com/ngaut/gostats"
 )
 
 var (
@@ -202,7 +202,7 @@ func main() {
 	}()
 
 	time.Sleep(time.Second)
-	if err := s.SetMyselfOnline(); err != nil {
+	if err := s.SetMyselfOnline(); err != nil { // 设置ONLINE成功
 		log.WarnError(err, "mark myself online fail, you need mark online manually by dashboard")
 	}
 

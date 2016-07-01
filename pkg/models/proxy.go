@@ -22,16 +22,17 @@ const (
 	PROXY_STATE_MARK_OFFLINE = "mark_offline"
 )
 
+// PROXY基本信息
 type ProxyInfo struct {
-	Id           string `json:"id"`
-	Addr         string `json:"addr"`
-	LastEvent    string `json:"last_event"`
-	LastEventTs  int64  `json:"last_event_ts"`
-	State        string `json:"state"`
-	Description  string `json:"description"`
-	DebugVarAddr string `json:"debug_var_addr"`
-	Pid          int    `json:"pid"`
-	StartAt      string `json:"start_at"`
+	Id           string `json:"id"`             // ID
+	Addr         string `json:"addr"`           // 地址
+	LastEvent    string `json:"last_event"`     // 暂时无效
+	LastEventTs  int64  `json:"last_event_ts"`  // 暂时无效
+	State        string `json:"state"`          // 状态(OFFLINE/ONLINE)
+	Description  string `json:"description"`    // 描述信息
+	DebugVarAddr string `json:"debug_var_addr"` // Debug地址
+	Pid          int    `json:"pid"`            // 进程ID
+	StartAt      string `json:"start_at"`       // 启动时间
 }
 
 func (p *ProxyInfo) Ops() (int64, error) {

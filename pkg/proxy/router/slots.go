@@ -65,7 +65,7 @@ func (s *Slot) forward(r *Request, key []byte) error {
 	if err != nil {
 		return err
 	} else {
-		bc.PushBack(r)
+		bc.PushBack(r) // 将请求放入转发队列
 		return nil
 	}
 }

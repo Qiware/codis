@@ -22,13 +22,14 @@ type TopoUpdate interface {
 
 type ZkFactory func(zkAddr string, zkSessionTimeout int) (zkhelper.Conn, error)
 
+/* zk拓扑对象 */
 type Topology struct {
-	ProductName      string
-	zkAddr           string
-	zkConn           zkhelper.Conn
-	fact             ZkFactory
-	provider         string
-	zkSessionTimeout int
+	ProductName      string        // 产品名
+	zkAddr           string        // zk地址
+	zkConn           zkhelper.Conn // zk连接对象
+	fact             ZkFactory     // 生产者(回调函数: 用于创建zk连接对象)
+	provider         string        // 服务提供者(zookeeper/etcd)
+	zkSessionTimeout int           // 超时时间
 }
 
 func (top *Topology) GetGroup(groupId int) (*models.ServerGroup, error) {
@@ -53,6 +54,7 @@ func (top *Topology) GetSlotByIndex(i int) (*models.Slot, *models.ServerGroup, e
 	return slot, groupServer, nil
 }
 
+/* 创建zk top对象 */
 func NewTopo(ProductName string, zkAddr string, f ZkFactory, provider string, zkSessionTimeout int) *Topology {
 	t := &Topology{zkAddr: zkAddr, ProductName: ProductName, fact: f, provider: provider, zkSessionTimeout: zkSessionTimeout}
 	if t.fact == nil {
@@ -71,7 +73,7 @@ func NewTopo(ProductName string, zkAddr string, f ZkFactory, provider string, zk
 
 func (top *Topology) InitZkConn() {
 	var err error
-	top.zkConn, err = top.fact(top.zkAddr, top.zkSessionTimeout)
+	top.zkConn, err = top.fact(top.zkAddr, top.zkSessionTimeout) // 连接zk服务
 	if err != nil {
 		log.PanicErrorf(err, "init failed")
 	}

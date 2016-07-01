@@ -24,18 +24,18 @@ import (
 )
 
 type Server struct {
-	conf   *Config
-	topo   *Topology
-	info   models.ProxyInfo
-	groups map[int]int
+	conf   *Config          // 配置信息
+	topo   *Topology        // ZK客户端
+	info   models.ProxyInfo // PROXY信息
+	groups map[int]int      // SLOT -> GROUP映射
 
-	lastActionSeq int
+	lastActionSeq int // 最近Action序列
 
-	evtbus   chan interface{}
-	router   *router.Router
-	listener net.Listener
+	evtbus   chan interface{} // ZK事件队列
+	router   *router.Router   // 与redis的连接
+	listener net.Listener     // 帧听端口(19000)
 
-	kill chan interface{}
+	kill chan interface{} // KILL通道
 	wait sync.WaitGroup
 	stop sync.Once
 }
@@ -69,24 +69,26 @@ func New(addr string, debugVarAddr string, conf *Config) *Server {
 
 	log.Infof("proxy info = %+v", s.info)
 
-	if l, err := net.Listen(conf.proto, addr); err != nil {
+	if l, err := net.Listen(conf.proto, addr); err != nil { // 帧听指定端口
 		log.PanicErrorf(err, "open listener failed")
 	} else {
 		s.listener = l
 	}
-	s.router = router.NewWithAuth(conf.passwd)
-	s.evtbus = make(chan interface{}, 1024)
+	s.router = router.NewWithAuth(conf.passwd) // 创建router对象
+	s.evtbus = make(chan interface{}, 1024)    // zk事件队列
 
-	s.register()
+	s.register() // 向zk服务注册proxy信息
 
 	s.wait.Add(1)
 	go func() {
 		defer s.wait.Done()
-		s.serve()
+		s.serve() // 启动proxy服务
 	}()
 	return s
 }
 
+// 设置PROXY状态为ONLINE
+// 描述: 通过向dashboard发送上线请求
 func (s *Server) SetMyselfOnline() error {
 	log.Info("mark myself online")
 	info := models.ProxyInfo{
@@ -105,11 +107,12 @@ func (s *Server) SetMyselfOnline() error {
 	return nil
 }
 
+// 启动proxy服务
 func (s *Server) serve() {
 	defer s.close()
 
-	if !s.waitOnline() {
-		return
+	if !s.waitOnline() { // 等待proxy上线成功
+		return // 上线失败
 	}
 
 	s.rewatchNodes()
@@ -126,29 +129,30 @@ func (s *Server) serve() {
 	s.loopEvents()
 }
 
+// 接收客户端连接请求
 func (s *Server) handleConns() {
 	ch := make(chan net.Conn, 4096)
 	defer close(ch)
 
 	go func() {
-		for c := range ch {
+		for c := range ch { // 处理新建连接
 			x := router.NewSessionSize(c, s.conf.passwd, s.conf.maxBufSize, s.conf.maxTimeout)
 			go x.Serve(s.router, s.conf.maxPipeline)
 		}
 	}()
 
 	for {
-		c, err := s.listener.Accept()
+		c, err := s.listener.Accept() // 等待连接请求
 		if err != nil {
 			if ne, ok := err.(net.Error); ok && ne.Temporary() {
 				log.WarnErrorf(err, "[%p] proxy accept new connection failed, get temporary error", s)
-				time.Sleep(time.Millisecond*10)
+				time.Sleep(time.Millisecond * 10)
 				continue
 			}
 			log.WarnErrorf(err, "[%p] proxy accept new connection failed, get non-temporary error, must shutdown", s)
 			return
 		} else {
-			ch <- c
+			ch <- c // 将新建连接放入队列
 		}
 	}
 }
@@ -177,25 +181,33 @@ func (s *Server) close() {
 	})
 }
 
+// 监控Proxy结点信息
 func (s *Server) rewatchProxy() {
-	_, err := s.topo.WatchNode(path.Join(models.GetProxyPath(s.topo.ProductName), s.info.Id), s.evtbus)
+	_, err := s.topo.WatchNode(
+		path.Join(models.GetProxyPath(s.topo.ProductName), s.info.Id), s.evtbus)
 	if err != nil {
 		log.PanicErrorf(err, "watch node failed")
 	}
 }
 
+// 监控Actions结点信息
 func (s *Server) rewatchNodes() []string {
-	nodes, err := s.topo.WatchChildren(models.GetWatchActionPath(s.topo.ProductName), s.evtbus)
+	nodes, err := s.topo.WatchChildren(
+		models.GetWatchActionPath(s.topo.ProductName), s.evtbus)
 	if err != nil {
 		log.PanicErrorf(err, "watch children failed")
 	}
 	return nodes
 }
 
+/* 向zk服务注册proxy信息 */
 func (s *Server) register() {
+	// 创建Proxy信息
 	if _, err := s.topo.CreateProxyInfo(&s.info); err != nil {
 		log.PanicErrorf(err, "create proxy node failed")
 	}
+
+	// 创建Fence结点
 	if _, err := s.topo.CreateProxyFenceNode(&s.info); err != nil && err != zk.ErrNodeExists {
 		log.PanicErrorf(err, "create fence node failed")
 	}
@@ -210,23 +222,28 @@ func (s *Server) markOffline() {
 	s.info.State = models.PROXY_STATE_MARK_OFFLINE
 }
 
+// 等待proxy上线成功
 func (s *Server) waitOnline() bool {
 	for {
-		info, err := s.topo.GetProxyInfo(s.info.Id)
+		info, err := s.topo.GetProxyInfo(s.info.Id) // 获取Proxy信息
 		if err != nil {
 			log.PanicErrorf(err, "get proxy info failed: %s", s.info.Id)
 		}
+
+		// 判断proxy状态
 		switch info.State {
-		case models.PROXY_STATE_MARK_OFFLINE:
+		case models.PROXY_STATE_MARK_OFFLINE: // 下线状态
 			log.Infof("mark offline, proxy got offline event: %s", s.info.Id)
 			s.markOffline()
 			return false
-		case models.PROXY_STATE_ONLINE:
+		case models.PROXY_STATE_ONLINE: // 上线状态
 			s.info.State = info.State
 			log.Infof("we are online: %s", s.info.Id)
 			s.rewatchProxy()
 			return true
 		}
+
+		// 当proxy状态未知时...
 		select {
 		case <-s.kill:
 			log.Infof("mark offline, proxy is killed: %s", s.info.Id)
@@ -235,7 +252,7 @@ func (s *Server) waitOnline() bool {
 		default:
 		}
 		log.Infof("wait to be online: %s", s.info.Id)
-		time.Sleep(3 * time.Second)
+		time.Sleep(3 * time.Second) // 等待3秒
 	}
 }
 
@@ -260,6 +277,7 @@ func needResponse(receivers []string, self models.ProxyInfo) bool {
 	return false
 }
 
+// 获取GROUP MASTER的IP地址
 func groupMaster(groupInfo models.ServerGroup) string {
 	var master string
 	for _, server := range groupInfo.Servers {
@@ -280,7 +298,9 @@ func (s *Server) resetSlot(i int) {
 	s.router.ResetSlot(i)
 }
 
+// 填充SLOT[i]信息
 func (s *Server) fillSlot(i int) {
+	// 获取slot信息&对应group信息
 	slotInfo, slotGroup, err := s.topo.GetSlotByIndex(i)
 	if err != nil {
 		log.PanicErrorf(err, "get slot by index failed", i)
@@ -378,6 +398,7 @@ func (s *Server) checkAndDoTopoChange(seq int) bool {
 	return true
 }
 
+// 处理来自zk的行为
 func (s *Server) processAction(e interface{}) {
 	if strings.Index(getEventPath(e), models.GetProxyPath(s.topo.ProductName)) == 0 {
 		info, err := s.topo.GetProxyInfo(s.info.Id)
@@ -385,12 +406,12 @@ func (s *Server) processAction(e interface{}) {
 			log.PanicErrorf(err, "get proxy info failed: %s", s.info.Id)
 		}
 		switch info.State {
-		case models.PROXY_STATE_MARK_OFFLINE:
+		case models.PROXY_STATE_MARK_OFFLINE: // 下线
 			log.Infof("mark offline, proxy got offline event: %s", s.info.Id)
 			s.markOffline()
-		case models.PROXY_STATE_ONLINE:
+		case models.PROXY_STATE_ONLINE: // 上线
 			s.rewatchProxy()
-		default:
+		default: // 未知状态(异常)
 			log.Panicf("unknown proxy state %v", info)
 		}
 		return
@@ -439,6 +460,7 @@ func (s *Server) processAction(e interface{}) {
 	s.lastActionSeq = seqs[len(seqs)-1]
 }
 
+// 循环等待事件
 func (s *Server) loopEvents() {
 	ticker := time.NewTicker(time.Second)
 	defer ticker.Stop()
@@ -446,10 +468,10 @@ func (s *Server) loopEvents() {
 	var tick int = 0
 	for s.info.State == models.PROXY_STATE_ONLINE {
 		select {
-		case <-s.kill:
+		case <-s.kill: // 等待KILL信号
 			log.Infof("mark offline, proxy is killed: %s", s.info.Id)
 			s.markOffline()
-		case e := <-s.evtbus:
+		case e := <-s.evtbus: // 等待来至zk的消息
 			evtPath := getEventPath(e)
 			log.Infof("got event %s, %v, lastActionSeq %d", s.info.Id, e, s.lastActionSeq)
 			if strings.Index(evtPath, models.GetActionResponsePath(s.conf.productName)) == 0 {
@@ -463,8 +485,8 @@ func (s *Server) loopEvents() {
 					}
 				}
 			}
-			s.processAction(e)
-		case <-ticker.C:
+			s.processAction(e) // 处理来自zk的行为
+		case <-ticker.C: // 等待超时信号
 			if maxTick := s.conf.pingPeriod; maxTick != 0 {
 				if tick++; tick >= maxTick {
 					s.router.KeepAlive()

@@ -128,6 +128,7 @@ func GetActionSeqList(zkConn zkhelper.Conn, productName string) ([]int, error) {
 	return ExtraSeqList(nodes)
 }
 
+// 返回有序seq集合
 func ExtraSeqList(nodes []string) ([]int, error) {
 	var seqs []int
 	for _, nodeName := range nodes {

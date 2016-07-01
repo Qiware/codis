@@ -63,6 +63,7 @@ func (s *Session) Close() error {
 	return s.Conn.Close()
 }
 
+// 为新建连接提供服务
 func (s *Session) Serve(d Dispatcher, maxPipeline int) {
 	var errlist errors.ErrorList
 	defer func() {
@@ -74,55 +75,58 @@ func (s *Session) Serve(d Dispatcher, maxPipeline int) {
 		s.Close()
 	}()
 
+	// 新建接收队列
 	tasks := make(chan *Request, maxPipeline)
 	go func() {
 		defer func() {
 			for _ = range tasks {
 			}
 		}()
-		if err := s.loopWriter(tasks); err != nil {
+		if err := s.loopWriter(tasks); err != nil { // 转发数据
 			errlist.PushBack(err)
 		}
 		s.Close()
 	}()
 
 	defer close(tasks)
-	if err := s.loopReader(tasks, d); err != nil {
+	if err := s.loopReader(tasks, d); err != nil { // 接收数据
 		errlist.PushBack(err)
 	}
 }
 
+// 接收数据: 接收来自客户端的数据
 func (s *Session) loopReader(tasks chan<- *Request, d Dispatcher) error {
 	if d == nil {
 		return errors.New("nil dispatcher")
 	}
 	for !s.quit {
-		resp, err := s.Reader.Decode()
+		resp, err := s.Reader.Decode() // 接收数据
 		if err != nil {
 			return err
 		}
-		r, err := s.handleRequest(resp, d)
+		r, err := s.handleRequest(resp, d) // 处理请求
 		if err != nil {
 			return err
 		} else {
-			tasks <- r
+			tasks <- r // 将请求放入队列
 		}
 	}
 	return nil
 }
 
+// 发送数据: 发送数据去客户端
 func (s *Session) loopWriter(tasks <-chan *Request) error {
 	p := &FlushPolicy{
 		Encoder:     s.Writer,
 		MaxBuffered: 32,
 		MaxInterval: 300,
 	}
-	for r := range tasks {
+	for r := range tasks { // 依次获取请求对象
 		resp, err := s.handleResponse(r)
 		if err != nil {
 			return err
 		}
-		if err := p.Encode(resp, len(tasks) == 0); err != nil {
+		if err := p.Encode(resp, len(tasks) == 0); err != nil { // 发送应答去客户端
 			return err
 		}
 	}
@@ -131,10 +135,13 @@ func (s *Session) loopWriter(tasks <-chan *Request) error {
 
 var ErrRespIsRequired = errors.New("resp is required")
 
+// 组装应答
+// 注: 有些请求的应答在handleRequest中已经设置, 在此就无需合并处理
+// TODO: 研究多个应答如何合并的? 如: MGET, MSET, MHGET... etc.
 func (s *Session) handleResponse(r *Request) (*redis.Resp, error) {
 	r.Wait.Wait()
 	if r.Coalesce != nil {
-		if err := r.Coalesce(); err != nil {
+		if err := r.Coalesce(); err != nil { // 合并应答
 			return nil, err
 		}
 	}
@@ -149,6 +156,7 @@ func (s *Session) handleResponse(r *Request) (*redis.Resp, error) {
 	return resp, nil
 }
 
+// 接收处理
 func (s *Session) handleRequest(resp *redis.Resp, d Dispatcher) (*Request, error) {
 	opstr, err := getOpStr(resp)
 	if err != nil {
@@ -197,7 +205,7 @@ func (s *Session) handleRequest(resp *redis.Resp, d Dispatcher) (*Request, error
 	case "DEL":
 		return s.handleRequestMDel(r, d)
 	}
-	return r, d.Dispatch(r)
+	return r, d.Dispatch(r) // Dispatch: 将请求放入转发队列
 }
 
 func (s *Session) handleQuit(r *Request) (*Request, error) {
@@ -252,28 +260,31 @@ func (s *Session) handlePing(r *Request) (*Request, error) {
 	return r, nil
 }
 
+// 处理MGET命令
 func (s *Session) handleRequestMGet(r *Request, d Dispatcher) (*Request, error) {
 	nkeys := len(r.Resp.Array) - 1
-	if nkeys <= 1 {
-		return r, d.Dispatch(r)
+	if nkeys <= 1 { // 当MGET只有一个KEY时
+		return r, d.Dispatch(r) // 将请求放入分发队列
 	}
+
+	// 当MGET有多个KEY时
 	var sub = make([]*Request, nkeys)
 	for i := 0; i < len(sub); i++ {
 		sub[i] = &Request{
 			OpStr: r.OpStr,
 			Start: r.Start,
 			Resp: redis.NewArray([]*redis.Resp{
-				r.Resp.Array[0],
-				r.Resp.Array[i+1],
+				r.Resp.Array[0],   // MGET
+				r.Resp.Array[i+1], // KEY
 			}),
 			Wait:   r.Wait,
 			Failed: r.Failed,
 		}
-		if err := d.Dispatch(sub[i]); err != nil {
+		if err := d.Dispatch(sub[i]); err != nil { // 将子请求放入分发队列
 			return nil, err
 		}
 	}
-	r.Coalesce = func() error {
+	r.Coalesce = func() error { // 设置合并应答的回调
 		var array = make([]*redis.Resp, len(sub))
 		for i, x := range sub {
 			if err := x.Response.Err; err != nil {

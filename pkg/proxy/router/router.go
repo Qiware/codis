@@ -65,6 +65,7 @@ func (s *Router) ResetSlot(i int) error {
 	return nil
 }
 
+// 填充Router.slots对象
 func (s *Router) FillSlot(i int, addr, from string, lock bool) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -87,6 +88,7 @@ func (s *Router) KeepAlive() error {
 	return nil
 }
 
+// 将请求放入指定slot的转发队列
 func (s *Router) Dispatch(r *Request) error {
 	hkey := getHashKey(r.Resp, r.OpStr)
 	slot := s.slots[hashSlot(hkey)]
@@ -128,6 +130,7 @@ func (s *Router) resetSlot(i int) {
 	slot.unblock()
 }
 
+// 设置slot[i]对象相关信息
 func (s *Router) fillSlot(i int, addr, from string, lock bool) {
 	if !s.isValidSlot(i) {
 		return
@@ -135,9 +138,9 @@ func (s *Router) fillSlot(i int, addr, from string, lock bool) {
 	slot := s.slots[i]
 	slot.blockAndWait()
 
-	s.putBackendConn(slot.backend.bc)
-	s.putBackendConn(slot.migrate.bc)
-	slot.reset()
+	s.putBackendConn(slot.backend.bc) // 关闭连接
+	s.putBackendConn(slot.migrate.bc) // 关闭连接
+	slot.reset()                      // 重置信息
 
 	if len(addr) != 0 {
 		xx := strings.Split(addr, ":")
@@ -147,12 +150,12 @@ func (s *Router) fillSlot(i int, addr, from string, lock bool) {
 		if len(xx) >= 2 {
 			slot.backend.port = []byte(xx[1])
 		}
-		slot.backend.addr = addr
-		slot.backend.bc = s.getBackendConn(addr)
+		slot.backend.addr = addr                 // 设置ADDR
+		slot.backend.bc = s.getBackendConn(addr) // 建立连接
 	}
 	if len(from) != 0 {
-		slot.migrate.from = from
-		slot.migrate.bc = s.getBackendConn(from)
+		slot.migrate.from = from                 // 迁移源地址
+		slot.migrate.bc = s.getBackendConn(from) // 建立连接
 	}
 
 	if !lock {
