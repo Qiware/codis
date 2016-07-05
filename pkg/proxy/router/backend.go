@@ -13,20 +13,22 @@ import (
 	"github.com/CodisLabs/codis/pkg/utils/log"
 )
 
+// 与redis连接对象
 type BackendConn struct {
-	addr string
-	auth string
+	addr string // 地址: 10.110.122.123:6379
+	auth string // 密码
 	stop sync.Once
 
-	input chan *Request
+	input chan *Request // 此队列的数据是客户端发起的Redis操作请求, 将会发送到Redis服务
 }
 
+// 与Redis建立连接
 func NewBackendConn(addr, auth string) *BackendConn {
 	bc := &BackendConn{
 		addr: addr, auth: auth,
 		input: make(chan *Request, 1024),
 	}
-	go bc.Run()
+	go bc.Run() // 运行
 	return bc
 }
 
@@ -38,8 +40,8 @@ func (bc *BackendConn) Run() {
 			break
 		} else {
 			for i := len(bc.input); i != 0; i-- {
-				r := <-bc.input
-				bc.setResponse(r, nil, err)
+				r := <-bc.input             // 从input队列获取应答
+				bc.setResponse(r, nil, err) // 设置应答信息
 			}
 		}
 		log.WarnErrorf(err, "backend conn [%p] to %s, restart [%d]", bc, bc.addr, k)
@@ -60,15 +62,17 @@ func (bc *BackendConn) Close() {
 
 func (bc *BackendConn) PushBack(r *Request) {
 	if r.Wait != nil {
-		r.Wait.Add(1)
+		r.Wait.Add(1) // 等待计数+1
 	}
 	bc.input <- r
 }
 
+// 给redis服务发送保活请求
 func (bc *BackendConn) KeepAlive() bool {
 	if len(bc.input) != 0 {
 		return false
 	}
+	// 创建保活请求
 	r := &Request{
 		Resp: redis.NewArray([]*redis.Resp{
 			redis.NewBulkBytes([]byte("PING")),
@@ -76,7 +80,7 @@ func (bc *BackendConn) KeepAlive() bool {
 	}
 
 	select {
-	case bc.input <- r:
+	case bc.input <- r: // 将请求放入INPUT队列
 		return true
 	default:
 		return false
@@ -86,9 +90,11 @@ func (bc *BackendConn) KeepAlive() bool {
 var ErrFailedRequest = errors.New("discard failed request")
 
 func (bc *BackendConn) loopWriter() error {
-	r, ok := <-bc.input
+	r, ok := <-bc.input // 从input队列获取Request对象
 	if ok {
-		c, tasks, err := bc.newBackendReader()
+		// c: 与redis的连接
+		// tasks: 任务通道
+		c, tasks, err := bc.newBackendReader() // 从服务端读取应答
 		if err != nil {
 			return bc.setResponse(r, nil, err)
 		}
@@ -99,10 +105,11 @@ func (bc *BackendConn) loopWriter() error {
 			MaxBuffered: 64,
 			MaxInterval: 300,
 		}
+		// 循环: 发送应答至客户端
 		for ok {
 			var flush = len(bc.input) == 0
 			if bc.canForward(r) {
-				if err := p.Encode(r.Resp, flush); err != nil {
+				if err := p.Encode(r.Resp, flush); err != nil { // 发送应答至客户端
 					return bc.setResponse(r, nil, err)
 				}
 				tasks <- r
@@ -113,13 +120,16 @@ func (bc *BackendConn) loopWriter() error {
 				bc.setResponse(r, nil, ErrFailedRequest)
 			}
 
-			r, ok = <-bc.input
+			r, ok = <-bc.input // 从input队列获取Request对象
+
 		}
 	}
 	return nil
 }
 
+// 接收来自redis服务端的数据
 func (bc *BackendConn) newBackendReader() (*redis.Conn, chan<- *Request, error) {
+	/* 建立与redis服务端的连接 */
 	c, err := redis.DialTimeout(bc.addr, 1024*512, time.Second)
 	if err != nil {
 		return nil, nil, err
@@ -136,7 +146,7 @@ func (bc *BackendConn) newBackendReader() (*redis.Conn, chan<- *Request, error) 
 	go func() {
 		defer c.Close()
 		for r := range tasks {
-			resp, err := c.Reader.Decode()
+			resp, err := c.Reader.Decode() // 发送tasks中的请求
 			bc.setResponse(r, resp, err)
 			if err != nil {
 				// close tcp to tell writer we are failed and should quit
@@ -191,7 +201,7 @@ func (bc *BackendConn) setResponse(r *Request, resp *redis.Resp, err error) erro
 		r.Failed.Set(true)
 	}
 	if r.Wait != nil {
-		r.Wait.Done()
+		r.Wait.Done() // 等待计数减1
 	}
 	if r.slot != nil {
 		r.slot.Done()
@@ -206,6 +216,9 @@ type SharedBackendConn struct {
 	refcnt int
 }
 
+// 新建与Redis的连接
+// addr: 其格式为"10.110.122.123:6379"
+// auth: Redis密码
 func NewSharedBackendConn(addr, auth string) *SharedBackendConn {
 	return &SharedBackendConn{BackendConn: NewBackendConn(addr, auth), refcnt: 1}
 }
@@ -233,7 +246,7 @@ func (s *SharedBackendConn) IncrRefcnt() {
 }
 
 type FlushPolicy struct {
-	*redis.Encoder
+	*redis.Encoder // 发送接口
 
 	MaxBuffered int
 	MaxInterval int64

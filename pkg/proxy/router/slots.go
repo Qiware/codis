@@ -88,17 +88,20 @@ func (s *Slot) prepare(r *Request, key []byte) (*SharedBackendConn, error) {
 	}
 }
 
+// 发起迁移请求
+// 当迁移过程中发生数据访问时, Proxy会发送”slotsmgrttagone”迁移命令给Redis, 强制
+// 将客户端要访问的Key立刻迁移, 然后再处理客户端的请求.
 func (s *Slot) slotsmgrt(r *Request, key []byte) error {
 	if len(key) == 0 || s.migrate.bc == nil {
 		return nil
 	}
 	m := &Request{
 		Resp: redis.NewArray([]*redis.Resp{
-			redis.NewBulkBytes([]byte("SLOTSMGRTTAGONE")),
-			redis.NewBulkBytes(s.backend.host),
-			redis.NewBulkBytes(s.backend.port),
-			redis.NewBulkBytes([]byte("3000")),
-			redis.NewBulkBytes(key),
+			redis.NewBulkBytes([]byte("SLOTSMGRTTAGONE")), // 立即迁移请求
+			redis.NewBulkBytes(s.backend.host),            // 目标IP
+			redis.NewBulkBytes(s.backend.port),            // 目标PORT
+			redis.NewBulkBytes([]byte("3000")),            // 超时时间
+			redis.NewBulkBytes(key),                       // 迁移KEY
 		}),
 		Wait: &sync.WaitGroup{},
 	}

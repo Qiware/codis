@@ -139,7 +139,7 @@ var ErrRespIsRequired = errors.New("resp is required")
 // 注: 有些请求的应答在handleRequest中已经设置, 在此就无需合并处理
 // TODO: 研究多个应答如何合并的? 如: MGET, MSET, MHGET... etc.
 func (s *Session) handleResponse(r *Request) (*redis.Resp, error) {
-	r.Wait.Wait()
+	r.Wait.Wait() // 等待应答 -- 当等待计数减为0才返回.
 	if r.Coalesce != nil {
 		if err := r.Coalesce(); err != nil { // 合并应答
 			return nil, err
@@ -157,6 +157,7 @@ func (s *Session) handleResponse(r *Request) (*redis.Resp, error) {
 }
 
 // 接收处理
+// resp: 请求数据(满足RESP协议)
 func (s *Session) handleRequest(resp *redis.Resp, d Dispatcher) (*Request, error) {
 	opstr, err := getOpStr(resp)
 	if err != nil {

@@ -307,7 +307,7 @@ func (s *Server) fillSlot(i int) {
 	}
 
 	var from string
-	var addr = groupMaster(*slotGroup)
+	var addr = groupMaster(*slotGroup) // Fromat: "10.110.122.123:6379"
 	if slotInfo.State.Status == models.SLOT_STATUS_MIGRATE {
 		fromGroup, err := s.topo.GetGroup(slotInfo.State.MigrateStatus.From)
 		if err != nil {

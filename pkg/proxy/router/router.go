@@ -17,12 +17,12 @@ const MaxSlotNum = models.DEFAULT_SLOT_NUM
 type Router struct {
 	mu sync.Mutex
 
-	auth string
-	pool map[string]*SharedBackendConn
+	auth string                        // 密码
+	pool map[string]*SharedBackendConn // 连接池(主键: "10.110.122.123:6379")
 
-	slots [MaxSlotNum]*Slot
+	slots [MaxSlotNum]*Slot // 各slot的信息
 
-	closed bool
+	closed bool // 是否关闭
 }
 
 func New() *Router {
@@ -76,6 +76,7 @@ func (s *Router) FillSlot(i int, addr, from string, lock bool) error {
 	return nil
 }
 
+// 连接保活处理
 func (s *Router) KeepAlive() error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -83,7 +84,7 @@ func (s *Router) KeepAlive() error {
 		return errClosedRouter
 	}
 	for _, bc := range s.pool {
-		bc.KeepAlive()
+		bc.KeepAlive() // 给各redis服务发送保活请求
 	}
 	return nil
 }
@@ -95,17 +96,20 @@ func (s *Router) Dispatch(r *Request) error {
 	return slot.forward(r, hkey)
 }
 
+// 获取与addr的连接对象
+// addr: "10.110.122.123:6379"
 func (s *Router) getBackendConn(addr string) *SharedBackendConn {
 	bc := s.pool[addr]
 	if bc != nil {
-		bc.IncrRefcnt()
+		bc.IncrRefcnt() // 增加引用计数: 复用原有连接
 	} else {
-		bc = NewSharedBackendConn(addr, s.auth)
+		bc = NewSharedBackendConn(addr, s.auth) // 新建与redis的连接(引用计数已+1)
 		s.pool[addr] = bc
 	}
 	return bc
 }
 
+// 回收Redis连接
 func (s *Router) putBackendConn(bc *SharedBackendConn) {
 	if bc != nil && bc.Close() {
 		delete(s.pool, bc.Addr())
@@ -151,11 +155,11 @@ func (s *Router) fillSlot(i int, addr, from string, lock bool) {
 			slot.backend.port = []byte(xx[1])
 		}
 		slot.backend.addr = addr                 // 设置ADDR
-		slot.backend.bc = s.getBackendConn(addr) // 建立连接
+		slot.backend.bc = s.getBackendConn(addr) // 获取/新建连接
 	}
 	if len(from) != 0 {
 		slot.migrate.from = from                 // 迁移源地址
-		slot.migrate.bc = s.getBackendConn(from) // 建立连接
+		slot.migrate.bc = s.getBackendConn(from) // 获取/新建连接
 	}
 
 	if !lock {
