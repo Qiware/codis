@@ -32,6 +32,7 @@ func NewBackendConn(addr, auth string) *BackendConn {
 	return bc
 }
 
+// 与Redis服务进行通信
 func (bc *BackendConn) Run() {
 	log.Infof("backend conn [%p] to %s, start service", bc, bc.addr)
 	for k := 0; ; k++ {
@@ -51,7 +52,7 @@ func (bc *BackendConn) Run() {
 }
 
 func (bc *BackendConn) Addr() string {
-	return bc.addr
+	return bc.addr // 返回Redis服务端地址: "10.110.122.123:19000"
 }
 
 func (bc *BackendConn) Close() {
@@ -62,7 +63,7 @@ func (bc *BackendConn) Close() {
 
 func (bc *BackendConn) PushBack(r *Request) {
 	if r.Wait != nil {
-		r.Wait.Add(1) // 等待计数+1
+		r.Wait.Add(1) // 请求等待计数+1
 	}
 	bc.input <- r
 }
@@ -157,6 +158,7 @@ func (bc *BackendConn) newBackendReader() (*redis.Conn, chan<- *Request, error) 
 	return c, tasks, nil
 }
 
+// 发生鉴权数据至Redis服务, 并判断是否鉴权成功
 func (bc *BackendConn) verifyAuth(c *redis.Conn) error {
 	if bc.auth == "" {
 		return nil
@@ -187,6 +189,7 @@ func (bc *BackendConn) verifyAuth(c *redis.Conn) error {
 	}
 }
 
+// 判断请求是否异常
 func (bc *BackendConn) canForward(r *Request) bool {
 	if r.Failed != nil && r.Failed.Get() {
 		return false
@@ -204,7 +207,7 @@ func (bc *BackendConn) setResponse(r *Request, resp *redis.Resp, err error) erro
 		r.Wait.Done() // 等待计数减1
 	}
 	if r.slot != nil {
-		r.slot.Done()
+		r.slot.Done() // 等待计数减1
 	}
 	return err
 }
@@ -236,6 +239,7 @@ func (s *SharedBackendConn) Close() bool {
 	return s.refcnt == 0
 }
 
+// 增加引用计数
 func (s *SharedBackendConn) IncrRefcnt() {
 	s.mu.Lock()
 	defer s.mu.Unlock()

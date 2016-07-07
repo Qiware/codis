@@ -22,16 +22,17 @@ type Session struct {
 
 	Ops int64
 
-	LastOpUnix int64
-	CreateUnix int64
+	LastOpUnix int64 // 最近操作时间戳
+	CreateUnix int64 // 会话创建时间戳
 
-	auth       string
-	authorized bool
+	auth       string // 密码
+	authorized bool   // 鉴权成功与否
 
-	quit   bool
-	failed atomic2.Bool
+	quit   bool         // 是否退出
+	failed atomic2.Bool // 是否失败
 }
 
+// 将Session生成JSON数据
 func (s *Session) String() string {
 	o := &struct {
 		Ops        int64  `json:"ops"`
@@ -46,6 +47,9 @@ func (s *Session) String() string {
 	return string(b)
 }
 
+// 新建Session对象
+// c: 客户端与PROXY的连接
+// auth: 登录密码
 func NewSession(c net.Conn, auth string) *Session {
 	return NewSessionSize(c, auth, 1024*32, 1800)
 }
@@ -215,6 +219,7 @@ func (s *Session) handleQuit(r *Request) (*Request, error) {
 	return r, nil
 }
 
+// AUTH: 鉴权请求处理
 func (s *Session) handleAuth(r *Request) (*Request, error) {
 	if len(r.Resp.Array) != 2 {
 		r.Response.Resp = redis.NewError([]byte("ERR wrong number of arguments for 'AUTH' command"))
@@ -235,6 +240,7 @@ func (s *Session) handleAuth(r *Request) (*Request, error) {
 	}
 }
 
+// SELECT: 选择分区请求处理
 func (s *Session) handleSelect(r *Request) (*Request, error) {
 	if len(r.Resp.Array) != 2 {
 		r.Response.Resp = redis.NewError([]byte("ERR wrong number of arguments for 'SELECT' command"))
@@ -252,6 +258,7 @@ func (s *Session) handleSelect(r *Request) (*Request, error) {
 	}
 }
 
+// PING: 保活请求处理
 func (s *Session) handlePing(r *Request) (*Request, error) {
 	if len(r.Resp.Array) != 1 {
 		r.Response.Resp = redis.NewError([]byte("ERR wrong number of arguments for 'PING' command"))
@@ -261,7 +268,7 @@ func (s *Session) handlePing(r *Request) (*Request, error) {
 	return r, nil
 }
 
-// 处理MGET命令
+// MGET: 处理MGET命令
 func (s *Session) handleRequestMGet(r *Request, d Dispatcher) (*Request, error) {
 	nkeys := len(r.Resp.Array) - 1
 	if nkeys <= 1 { // 当MGET只有一个KEY时
@@ -306,6 +313,7 @@ func (s *Session) handleRequestMGet(r *Request, d Dispatcher) (*Request, error) 
 	return r, nil
 }
 
+// MSET: 处理MSET请求
 func (s *Session) handleRequestMSet(r *Request, d Dispatcher) (*Request, error) {
 	nblks := len(r.Resp.Array) - 1
 	if nblks <= 2 {
@@ -351,6 +359,7 @@ func (s *Session) handleRequestMSet(r *Request, d Dispatcher) (*Request, error) 
 	return r, nil
 }
 
+// DEL: 处理DEL请求
 func (s *Session) handleRequestMDel(r *Request, d Dispatcher) (*Request, error) {
 	nkeys := len(r.Resp.Array) - 1
 	if nkeys <= 1 {

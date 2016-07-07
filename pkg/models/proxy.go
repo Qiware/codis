@@ -17,9 +17,9 @@ import (
 )
 
 const (
-	PROXY_STATE_ONLINE       = "online"
-	PROXY_STATE_OFFLINE      = "offline"
-	PROXY_STATE_MARK_OFFLINE = "mark_offline"
+	PROXY_STATE_ONLINE       = "online"       // 上线状态
+	PROXY_STATE_OFFLINE      = "offline"      // 下线状态
+	PROXY_STATE_MARK_OFFLINE = "mark_offline" // 踢下线状态
 )
 
 // PROXY基本信息

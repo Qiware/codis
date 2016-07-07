@@ -10,10 +10,11 @@ import (
 	"github.com/CodisLabs/codis/pkg/utils/atomic2"
 )
 
+// 操作状态
 type OpStats struct {
-	opstr string
-	calls atomic2.Int64
-	usecs atomic2.Int64
+	opstr string        // 操作命令(如: GET, SET, MGET...)
+	calls atomic2.Int64 // 操作次数
+	usecs atomic2.Int64 // 所有操作总耗时(微秒)
 }
 
 func (s *OpStats) OpStr() string {
@@ -21,11 +22,11 @@ func (s *OpStats) OpStr() string {
 }
 
 func (s *OpStats) Calls() int64 {
-	return s.calls.Get()
+	return s.calls.Get() // 操作次数
 }
 
 func (s *OpStats) USecs() int64 {
-	return s.usecs.Get()
+	return s.usecs.Get() // 总耗时
 }
 
 func (s *OpStats) MarshalJSON() ([]byte, error) {
@@ -46,10 +47,10 @@ func (s *OpStats) MarshalJSON() ([]byte, error) {
 }
 
 var cmdstats struct {
-	requests atomic2.Int64
+	requests atomic2.Int64 // Request总数
 
-	opmap map[string]*OpStats
-	rwlck sync.RWMutex
+	opmap map[string]*OpStats // 各操作状态
+	rwlck sync.RWMutex        // 读写锁
 }
 
 func init() {
@@ -93,5 +94,5 @@ func incrOpStats(opstr string, usecs int64) {
 	s := GetOpStats(opstr, true)
 	s.calls.Incr()
 	s.usecs.Add(usecs)
-	cmdstats.requests.Incr()
+	cmdstats.requests.Incr() // Request数+1
 }

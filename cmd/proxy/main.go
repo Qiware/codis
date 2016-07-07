@@ -206,6 +206,6 @@ func main() {
 		log.WarnError(err, "mark myself online fail, you need mark online manually by dashboard")
 	}
 
-	s.Join()
+	s.Join() // 等待结束信号
 	log.Infof("proxy exit!! :(")
 }

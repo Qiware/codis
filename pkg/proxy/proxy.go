@@ -23,6 +23,7 @@ import (
 	topo "github.com/wandoulabs/go-zookeeper/zk"
 )
 
+// PROXY服务对象
 type Server struct {
 	conf   *Config          // 配置信息
 	topo   *Topology        // ZK客户端
@@ -32,7 +33,7 @@ type Server struct {
 	lastActionSeq int // 最近Action序列
 
 	evtbus   chan interface{} // ZK事件队列
-	router   *router.Router   // 与redis的连接
+	router   *router.Router   // 路由Redis服务的对象
 	listener net.Listener     // 帧听端口(19000)
 
 	kill chan interface{} // KILL通道
@@ -79,10 +80,10 @@ func New(addr string, debugVarAddr string, conf *Config) *Server {
 
 	s.register() // 向zk服务注册proxy信息
 
-	s.wait.Add(1)
+	s.wait.Add(1) // 等待计数增1
 	go func() {
-		defer s.wait.Done()
-		s.serve() // 启动proxy服务
+		defer s.wait.Done() // 退出时等待计数增1
+		s.serve()           // 启动proxy服务
 	}()
 	return s
 }
@@ -162,7 +163,7 @@ func (s *Server) Info() models.ProxyInfo {
 }
 
 func (s *Server) Join() {
-	s.wait.Wait()
+	s.wait.Wait() // 等待服务结束信号
 }
 
 func (s *Server) Close() error {
@@ -217,6 +218,7 @@ func (s *Server) register() {
 	log.Warn("*******************************")
 }
 
+// 执行下线操作
 func (s *Server) markOffline() {
 	s.topo.Close(s.info.Id)
 	s.info.State = models.PROXY_STATE_MARK_OFFLINE
@@ -232,9 +234,9 @@ func (s *Server) waitOnline() bool {
 
 		// 判断proxy状态
 		switch info.State {
-		case models.PROXY_STATE_MARK_OFFLINE: // 下线状态
+		case models.PROXY_STATE_MARK_OFFLINE: // 踢下线状态
 			log.Infof("mark offline, proxy got offline event: %s", s.info.Id)
-			s.markOffline()
+			s.markOffline() // 执行下线操作
 			return false
 		case models.PROXY_STATE_ONLINE: // 上线状态
 			s.info.State = info.State
@@ -243,11 +245,11 @@ func (s *Server) waitOnline() bool {
 			return true
 		}
 
-		// 当proxy状态未知时...
+		// 当proxy状态为"下线状态"时...
 		select {
 		case <-s.kill:
 			log.Infof("mark offline, proxy is killed: %s", s.info.Id)
-			s.markOffline()
+			s.markOffline() // 执行下线操作
 			return false
 		default:
 		}
@@ -401,24 +403,24 @@ func (s *Server) checkAndDoTopoChange(seq int) bool {
 // 处理来自zk的行为
 func (s *Server) processAction(e interface{}) {
 	if strings.Index(getEventPath(e), models.GetProxyPath(s.topo.ProductName)) == 0 {
-		info, err := s.topo.GetProxyInfo(s.info.Id)
+		info, err := s.topo.GetProxyInfo(s.info.Id) // 获取PROXY信息
 		if err != nil {
 			log.PanicErrorf(err, "get proxy info failed: %s", s.info.Id)
 		}
 		switch info.State {
-		case models.PROXY_STATE_MARK_OFFLINE: // 下线
+		case models.PROXY_STATE_MARK_OFFLINE: // 下线操作
 			log.Infof("mark offline, proxy got offline event: %s", s.info.Id)
-			s.markOffline()
+			s.markOffline() // 执行下线操作
 		case models.PROXY_STATE_ONLINE: // 上线
-			s.rewatchProxy()
-		default: // 未知状态(异常)
+			s.rewatchProxy() // 关注PROXY结点的消息
+		default: // 下线状态(异常)
 			log.Panicf("unknown proxy state %v", info)
 		}
 		return
 	}
 
 	//re-watch
-	nodes := s.rewatchNodes()
+	nodes := s.rewatchNodes() // 关注PRODUCT所有子结点消息
 
 	seqs, err := models.ExtraSeqList(nodes)
 	if err != nil {
@@ -471,7 +473,7 @@ func (s *Server) loopEvents() {
 		case <-s.kill: // 等待KILL信号
 			log.Infof("mark offline, proxy is killed: %s", s.info.Id)
 			s.markOffline()
-		case e := <-s.evtbus: // 等待来至zk的消息
+		case e := <-s.evtbus: // 等待来至zk的事件
 			evtPath := getEventPath(e)
 			log.Infof("got event %s, %v, lastActionSeq %d", s.info.Id, e, s.lastActionSeq)
 			if strings.Index(evtPath, models.GetActionResponsePath(s.conf.productName)) == 0 {
@@ -485,7 +487,7 @@ func (s *Server) loopEvents() {
 					}
 				}
 			}
-			s.processAction(e) // 处理来自zk的行为
+			s.processAction(e) // 处理来自zk的事件
 		case <-ticker.C: // 等待超时信号
 			if maxTick := s.conf.pingPeriod; maxTick != 0 {
 				if tick++; tick >= maxTick {

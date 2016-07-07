@@ -25,10 +25,13 @@ type Router struct {
 	closed bool // 是否关闭
 }
 
+// 新建Router对象
 func New() *Router {
 	return NewWithAuth("")
 }
 
+// 新建Router对象
+// auth: 密码
 func NewWithAuth(auth string) *Router {
 	s := &Router{
 		auth: auth,
@@ -40,6 +43,7 @@ func NewWithAuth(auth string) *Router {
 	return s
 }
 
+// 释放Router对象
 func (s *Router) Close() error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -140,7 +144,7 @@ func (s *Router) fillSlot(i int, addr, from string, lock bool) {
 		return
 	}
 	slot := s.slots[i]
-	slot.blockAndWait()
+	slot.blockAndWait() // 加锁
 
 	s.putBackendConn(slot.backend.bc) // 关闭连接
 	s.putBackendConn(slot.migrate.bc) // 关闭连接
@@ -163,7 +167,7 @@ func (s *Router) fillSlot(i int, addr, from string, lock bool) {
 	}
 
 	if !lock {
-		slot.unblock()
+		slot.unblock() // 解锁
 	}
 
 	if slot.migrate.bc != nil {

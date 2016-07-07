@@ -12,18 +12,19 @@ import (
 	"github.com/CodisLabs/codis/pkg/utils/log"
 )
 
+// SLOT对象
 type Slot struct {
-	id int
+	id int // SLOT编号
 
-	backend struct {
-		addr string
-		host []byte
-		port []byte
-		bc   *SharedBackendConn
+	backend struct { // Redis服务: SLOT存储到目标Redis服务
+		addr string             // Redis地址: "10.110.122.123:6379"
+		host []byte             // Redis地址: "10.110.122.123"
+		port []byte             // Redis端口: "6379"
+		bc   *SharedBackendConn // Redis连接对象
 	}
-	migrate struct {
-		from string
-		bc   *SharedBackendConn
+	migrate struct { // Redis服务: 需要将此Redis服务的数据迁移到目标Redis服务
+		from string             // Redis地址: "10.110.122.123:6379"
+		bc   *SharedBackendConn // Redis连接对象
 	}
 
 	wait sync.WaitGroup
@@ -36,9 +37,9 @@ type Slot struct {
 func (s *Slot) blockAndWait() {
 	if !s.lock.hold {
 		s.lock.hold = true
-		s.lock.Lock()
+		s.lock.Lock() // 加锁
 	}
-	s.wait.Wait()
+	s.wait.Wait() // 等待信号
 }
 
 func (s *Slot) unblock() {
@@ -46,7 +47,7 @@ func (s *Slot) unblock() {
 		return
 	}
 	s.lock.hold = false
-	s.lock.Unlock()
+	s.lock.Unlock() // 解锁
 }
 
 func (s *Slot) reset() {
@@ -58,9 +59,10 @@ func (s *Slot) reset() {
 	s.migrate.bc = nil
 }
 
+// 转发请求：将请求放入bc发送队列
 func (s *Slot) forward(r *Request, key []byte) error {
 	s.lock.RLock()
-	bc, err := s.prepare(r, key)
+	bc, err := s.prepare(r, key) // 预处理
 	s.lock.RUnlock()
 	if err != nil {
 		return err
@@ -72,12 +74,13 @@ func (s *Slot) forward(r *Request, key []byte) error {
 
 var ErrSlotIsNotReady = errors.New("slot is not ready, may be offline")
 
+// 预处理：将请求发送给目标Redis服务之前的处理
 func (s *Slot) prepare(r *Request, key []byte) (*SharedBackendConn, error) {
 	if s.backend.bc == nil {
 		log.Infof("slot-%04d is not ready: key = %s", s.id, key)
 		return nil, ErrSlotIsNotReady
 	}
-	if err := s.slotsmgrt(r, key); err != nil {
+	if err := s.slotsmgrt(r, key); err != nil { // 发起迁移请求
 		log.Warnf("slot-%04d migrate from = %s to %s failed: key = %s, error = %s",
 			s.id, s.migrate.from, s.backend.addr, key, err)
 		return nil, err

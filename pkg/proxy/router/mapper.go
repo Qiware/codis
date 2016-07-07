@@ -28,6 +28,7 @@ var (
 	blacklist = make(map[string]bool)
 )
 
+// 初始化命令黑名单
 func init() {
 	for _, s := range []string{
 		"KEYS", "MOVE", "OBJECT", "RENAME", "RENAMENX", "SCAN", "BITOP", "MSETNX", "MIGRATE", "RESTORE",
@@ -41,6 +42,7 @@ func init() {
 	}
 }
 
+// 判断命令是否不被支持
 func isNotAllowed(opstr string) bool {
 	return blacklist[opstr]
 }
@@ -50,6 +52,7 @@ var (
 	ErrBadOpStrLen = errors.New("bad command length, too short or too long")
 )
 
+// 获取操作命令
 func getOpStr(resp *redis.Resp) (string, error) {
 	if !resp.IsArray() || len(resp.Array) == 0 {
 		return "", ErrBadRespType
@@ -78,6 +81,7 @@ func getOpStr(resp *redis.Resp) (string, error) {
 	return string(upper[:len(op)]), nil
 }
 
+// 通过KEY生成SLOT ID -- 使用CRC32算法
 func hashSlot(key []byte) int {
 	const (
 		TagBeg = '{'
@@ -91,6 +95,7 @@ func hashSlot(key []byte) int {
 	return int(crc32.ChecksumIEEE(key) % MaxSlotNum)
 }
 
+// 获取被操作的KEY
 func getHashKey(resp *redis.Resp, opstr string) []byte {
 	var index = 1
 	switch opstr {
