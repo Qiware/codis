@@ -21,10 +21,10 @@ const (
 )
 
 const (
-	MIGRATE_TASK_PENDING   string = "pending"
-	MIGRATE_TASK_MIGRATING string = "migrating"
-	MIGRATE_TASK_FINISHED  string = "finished"
-	MIGRATE_TASK_ERR       string = "error"
+	MIGRATE_TASK_PENDING   string = "pending"   // 等待执行
+	MIGRATE_TASK_MIGRATING string = "migrating" // 正在执行
+	MIGRATE_TASK_FINISHED  string = "finished"  // 执行完成
+	MIGRATE_TASK_ERR       string = "error"     // 异常
 )
 
 // check if migrate task is valid
