@@ -16,32 +16,35 @@ import (
 	"github.com/CodisLabs/codis/pkg/utils/log"
 )
 
+// 迁移任务信息
 type MigrateTaskInfo struct {
-	SlotId     int    `json:"slot_id"`
-	NewGroupId int    `json:"new_group"`
-	Delay      int    `json:"delay"`
-	CreateAt   string `json:"create_at"`
-	Percent    int    `json:"percent"`
-	Status     string `json:"status"`
-	Id         string `json:"-"`
+	SlotId     int    `json:"slot_id"`   // SLOT ID
+	NewGroupId int    `json:"new_group"` // 新组ID
+	Delay      int    `json:"delay"`     // 延迟时间(微秒)
+	CreateAt   string `json:"create_at"` // 任务创建时间
+	Percent    int    `json:"percent"`   // 完成比例
+	Status     string `json:"status"`    // 当前状态
+	Id         string `json:"-"`         // ??
 }
 
+// SLOT迁移进度
 type SlotMigrateProgress struct {
-	SlotId    int `json:"slot_id"`
-	FromGroup int `json:"from"`
-	ToGroup   int `json:"to"`
-	Remain    int `json:"remain"`
+	SlotId    int `json:"slot_id"` // SLOT ID
+	FromGroup int `json:"from"`    // 原组
+	ToGroup   int `json:"to"`      // 目标组
+	Remain    int `json:"remain"`  // 剩余数量
 }
 
 func (p SlotMigrateProgress) String() string {
 	return fmt.Sprintf("migrate Slot: slot_%d From: group_%d To: group_%d remain: %d keys", p.SlotId, p.FromGroup, p.ToGroup, p.Remain)
 }
 
+// 迁移任务对象
 type MigrateTask struct {
-	MigrateTaskInfo
-	zkConn       zkhelper.Conn
-	productName  string
-	progressChan chan SlotMigrateProgress
+	MigrateTaskInfo                          // 任务信息
+	zkConn          zkhelper.Conn            // zk连接
+	productName     string                   // 产品名
+	progressChan    chan SlotMigrateProgress // 进度队列
 }
 
 func GetMigrateTask(info MigrateTaskInfo) *MigrateTask {
@@ -52,16 +55,20 @@ func GetMigrateTask(info MigrateTaskInfo) *MigrateTask {
 	}
 }
 
+// 更新迁移任务状态
 func (t *MigrateTask) UpdateStatus(status string) {
 	t.Status = status
 	b, _ := json.Marshal(t.MigrateTaskInfo)
 	t.zkConn.Set(getMigrateTasksPath(t.productName)+"/"+t.Id, b, -1)
 }
 
+// 迁移任务已经完成
 func (t *MigrateTask) UpdateFinish() {
 	t.Status = MIGRATE_TASK_FINISHED
 	t.zkConn.Delete(getMigrateTasksPath(t.productName)+"/"+t.Id, -1)
 }
+
+// 迁移某个SLOT对应的所有数据
 func (t *MigrateTask) migrateSingleSlot(slotId int, to int) error {
 	// set slot status
 	s, err := models.GetSlot(t.zkConn, t.productName, slotId)
@@ -161,8 +168,24 @@ func (t *MigrateTask) rollbackPremigrate() {
 
 var ErrGroupMasterNotFound = errors.New("group master not found")
 
-// will block until all keys are migrated
-func (task *MigrateTask) Migrate(slot *models.Slot, fromGroup, toGroup int, onProgress func(SlotMigrateProgress)) (err error) {
+//
+/******************************************************************************
+ **函数名称: Migrate
+ **功    能: 迁移单个SLOT数据
+ **输入参数:
+ **     slot: SLOT对象
+ **     fromGroup: 原组
+ **     toGroup: 目标组
+ **     onProgress: 进度回调
+ **输出参数:
+ **     err: 错误信息
+ **返    回:
+ **实现描述:
+ **注意事项: will block until all keys are migrated
+ **作    者: # Codis # XXXX.XX.XX #
+ ******************************************************************************/
+func (task *MigrateTask) Migrate(slot *models.Slot, fromGroup, toGroup int,
+	onProgress func(SlotMigrateProgress)) (err error) {
 	groupFrom, err := models.GetGroup(task.zkConn, task.productName, fromGroup)
 	if err != nil {
 		return err

@@ -37,6 +37,7 @@ type MigrateManager struct {
 	productName string
 }
 
+// 获取迁移任务路径
 func getMigrateTasksPath(product string) string {
 	return fmt.Sprintf("/zk/codis/db_%s/migrate_tasks", product)
 }
@@ -92,6 +93,7 @@ func (m *MigrateManager) NextTask() *MigrateTaskInfo {
 	return &ts[0]
 }
 
+// 从zk中获取迁移任务信息
 func (m *MigrateManager) Tasks() []MigrateTaskInfo {
 	res := Tasks{}
 	tasks, _, _ := safeZkConn.Children(getMigrateTasksPath(m.productName))

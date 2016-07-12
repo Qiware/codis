@@ -16,9 +16,9 @@ import (
 	"github.com/c4pt0r/cfg"
 	"github.com/docopt/docopt-go"
 
+	"github.com/CodisLabs/codis/pkg/utils"
 	"github.com/CodisLabs/codis/pkg/utils/errors"
 	"github.com/CodisLabs/codis/pkg/utils/log"
-	"github.com/CodisLabs/codis/pkg/utils"
 )
 
 // global objects
@@ -74,6 +74,7 @@ func setLogLevel(level string) {
 	log.Infof("set log level to %s", lv)
 }
 
+// 根据命令运行程序
 func runCommand(cmd string, args []string) (err error) {
 	argv := make([]string, 1)
 	argv[0] = cmd

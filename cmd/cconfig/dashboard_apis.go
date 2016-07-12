@@ -44,6 +44,7 @@ func apiGetProxyDebugVars() (int, string) {
 	return 200, string(b)
 }
 
+// 预览信息
 func apiOverview() (int, string) {
 	// get all server groups
 	groups, err := models.ServerGroups(unsafeZkConn, globalEnv.ProductName())
@@ -505,6 +506,7 @@ func apiForceRemoveLocks() (int, string) {
 	return jsonRetSucc()
 }
 
+// 删除Fence结点
 func apiRemoveFence() (int, string) {
 	err := models.ForceRemoveDeadFence(safeZkConn, globalEnv.ProductName())
 	if err != nil {
