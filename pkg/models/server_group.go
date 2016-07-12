@@ -295,7 +295,7 @@ func (self *ServerGroup) AddServer(zkConn zkhelper.Conn, s *Server, passwd strin
 		s.Type = SERVER_TYPE_MASTER
 	}
 
-	val, err := json.Marshal(s)
+	val, err := json.Marshal(s) // 生成JSON
 	if err != nil {
 		return errors.Trace(err)
 	}

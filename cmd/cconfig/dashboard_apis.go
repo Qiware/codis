@@ -346,6 +346,7 @@ func apiAddServerToGroup(server models.Server, param martini.Params) (int, strin
 	return jsonRetSucc()
 }
 
+// Promote special codis-server to master
 func apiPromoteServer(server models.Server, param martini.Params) (int, string) {
 	lock := utils.GetZkLock(safeZkConn, globalEnv.ProductName())
 	if err := lock.LockWithTimeout(0, fmt.Sprintf("promote server %+v", server)); err != nil {

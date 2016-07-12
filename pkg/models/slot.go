@@ -15,10 +15,10 @@ import (
 type SlotStatus string
 
 const (
-	SLOT_STATUS_ONLINE      SlotStatus = "online"
-	SLOT_STATUS_OFFLINE     SlotStatus = "offline"
-	SLOT_STATUS_MIGRATE     SlotStatus = "migrate"
-	SLOT_STATUS_PRE_MIGRATE SlotStatus = "pre_migrate"
+	SLOT_STATUS_ONLINE      SlotStatus = "online"      // SLOT状态: 在线
+	SLOT_STATUS_OFFLINE     SlotStatus = "offline"     // SLOT状态: 下线
+	SLOT_STATUS_MIGRATE     SlotStatus = "migrate"     // SLOT状态: 迁移
+	SLOT_STATUS_PRE_MIGRATE SlotStatus = "pre_migrate" // SLOT状态: 准备迁移
 )
 
 var ErrSlotAlreadyExists = errors.New("slots already exists")
@@ -42,11 +42,12 @@ type SlotState struct {
 	LastOpTs      string            `json:"last_op_ts"` // operation timestamp
 }
 
+// SLOT对象
 type Slot struct {
-	ProductName string    `json:"product_name"`
-	Id          int       `json:"id"`
-	GroupId     int       `json:"group_id"`
-	State       SlotState `json:"state"`
+	ProductName string    `json:"product_name"` // 产品名
+	Id          int       `json:"id"`           // SLOT ID
+	GroupId     int       `json:"group_id"`     // 所属组ID
+	State       SlotState `json:"state"`        // 状态
 }
 
 func (s *Slot) String() string {
@@ -78,6 +79,7 @@ func GetSlotBasePath(productName string) string {
 	return fmt.Sprintf("/zk/codis/db_%s/slots", productName)
 }
 
+// 获取SLOT对象信息
 func GetSlot(zkConn zkhelper.Conn, productName string, id int) (*Slot, error) {
 	zkPath := GetSlotPath(productName, id)
 	data, _, err := zkConn.Get(zkPath)

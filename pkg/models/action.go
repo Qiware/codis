@@ -339,6 +339,7 @@ func ForceRemoveLock(zkConn zkhelper.Conn, productName string) error {
 	return nil
 }
 
+// 强制删除Dead Fence
 func ForceRemoveDeadFence(zkConn zkhelper.Conn, productName string) error {
 	proxies, err := ProxyList(zkConn, productName, func(p *ProxyInfo) bool {
 		return p.State == PROXY_STATE_ONLINE
