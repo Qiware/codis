@@ -85,6 +85,7 @@ func SlotsMgrtTagSlot(c redis.Conn, slotId int, toAddr string) (int, int, error)
 	}
 }
 
+// 获取Redis状态
 func GetRedisStat(addr, passwd string) (map[string]string, error) {
 	c, err := DialTo(addr, passwd)
 	if err != nil {

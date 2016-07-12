@@ -8,11 +8,11 @@ import "fmt"
 type RespType byte
 
 const (
-	TypeString    RespType = '+'
-	TypeError     RespType = '-'
-	TypeInt       RespType = ':'
-	TypeBulkBytes RespType = '$'
-	TypeArray     RespType = '*'
+	TypeString    RespType = '+' // 字符串
+	TypeError     RespType = '-' // 错误信息
+	TypeInt       RespType = ':' // 整数类型
+	TypeBulkBytes RespType = '$' // 大块字符串
+	TypeArray     RespType = '*' // 数组类型
 )
 
 func (t RespType) String() string {
